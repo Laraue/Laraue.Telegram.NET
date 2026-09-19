@@ -4,6 +4,7 @@ using Laraue.Core.Exceptions.Web;
 using Laraue.Telegram.NET.Abstractions;
 using Laraue.Telegram.NET.Core.Extensions;
 using Laraue.Telegram.NET.Core.Routing.Middleware;
+using Laraue.Telegram.NET.Core.Telemetry;
 using Laraue.Telegram.NET.Core.Utils;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -46,7 +47,8 @@ public sealed class TelegramRouter : ITelegramRouter
         sw.Start();
 
         _telegramRequestContext.Update = update;
-        
+        using var requestScope = RequestScope.Start(update);
+
         var middlewares = new LinkedList<ITelegramMiddleware>();
         foreach (var middlewareType in _middlewareList.Items)
         {
@@ -80,21 +82,36 @@ public sealed class TelegramRouter : ITelegramRouter
             middlewareNode = middlewareNode.Previous;
         }
 
-        await invokeDelegate(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await invokeDelegate(cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            requestScope.Complete(ex);
+            throw;
+        }
+
         var executedRoute = _telegramRequestContext.GetExecutedRoute();
-        
+
         if (executedRoute is not null)
         {
             _logger.LogInformation(
                 "Request time {Time} ms, route: {RouteName} executed",
                 sw.ElapsedMilliseconds,
                 executedRoute);
+
+            requestScope.Complete(executedRoute.Details);
         }
         else
         {
-            throw new RouteNotFoundException(
-                sw.ElapsedMilliseconds, 
+            var exception = new RouteNotFoundException(
+                sw.ElapsedMilliseconds,
                 update);
+
+            requestScope.Complete(exception);
+
+            throw exception;
         }
     }
 }

@@ -82,6 +82,43 @@ to store all updates queue in the database or implementing custom `IUpdatesQueue
 https://api.telegram.org/bot5118263652:AAHiPDQ8kVcbs2WZWG4Z.../setWebhook?url=https://your.host/api/telegram
 ```
 
+### Metrics and tracing
+
+`Laraue.Telegram.NET.Core` reports a trace and a set of metrics for every Telegram update processed
+through `TelegramRouter`, on the `"Laraue.Telegram.NET"` `ActivitySource`/`Meter`:
+
+| Instrument                    | Type      | Description                                                        |
+|--------------------------------|-----------|----------------------------------------------------------------------|
+| `telegram.requests.started`   | Counter   | Number of updates that started processing.                          |
+| `telegram.requests.failed`    | Counter   | Number of updates that failed (no route matched, or a handler threw). |
+| `telegram.request.duration`   | Histogram | Duration of processing an update, in milliseconds.                  |
+
+Measurements are tagged with `telegram.update_type` (e.g. `Message`, `CallbackQuery`),
+`telegram.route_name` (when a route was matched) and `telegram.status` (`success`, `not_found` or `error`).
+
+No OpenTelemetry package reference is required to emit this telemetry - it uses only
+`System.Diagnostics`/`System.Diagnostics.Metrics`. To actually collect it, add
+`Laraue.Telegram.NET.OpenTelemetry` and call the one-liner:
+
+```bash
+dotnet add package Laraue.Telegram.NET.OpenTelemetry
+```
+
+```csharp
+builder.Services
+    .AddLaraueTelegramTelemetry(
+        configureTracing: tracing => tracing.AddOtlpExporter(),
+        configureMetrics: metrics => metrics.AddOtlpExporter());
+```
+
+Or, if the app already builds its own `TracerProviderBuilder`/`MeterProviderBuilder`, subscribe manually:
+
+```csharp
+services.AddOpenTelemetry()
+    .WithTracing(t => t.AddLaraueTelegram())
+    .WithMetrics(m => m.AddLaraueTelegram());
+```
+
 ## Laraue.Telegram.NET.Authentication
 
 [![latest version](https://img.shields.io/nuget/v/Laraue.Telegram.NET.Authentication)](https://www.nuget.org/packages/Laraue.Telegram.NET.Authentication)

@@ -21,6 +21,7 @@
     <LaraueCoreDataAccessVersion>[10.8.0, 11)</LaraueCoreDataAccessVersion>
     <MicrosoftEntityFrameworkCoreVersion>[10.0.11, 11)</MicrosoftEntityFrameworkCoreVersion>
     <TelegramBotVersion>[22.10.2.1, 23)</TelegramBotVersion>
+    <OpenTelemetryExtensionsHostingVersion>[1.18.0, 2)</OpenTelemetryExtensionsHostingVersion>
   </PropertyGroup>
 
   <PropertyGroup>
