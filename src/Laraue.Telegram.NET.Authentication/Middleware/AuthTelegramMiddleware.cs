@@ -71,7 +71,8 @@ public class AuthTelegramMiddleware<TKey> : ITelegramMiddleware
                 user.Username,
                 user.LanguageCode,
                 user.FirstName,
-                user.LastName));
+                user.LastName),
+            cancellationToken);
         
         await _userIdByTelegramIdCache.TryAddAsync(user.Id, result.UserId);
         return result.UserId;

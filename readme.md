@@ -1,4 +1,4 @@
-# Laraue.Telegram.NET
+﻿# Laraue.Telegram.NET
 
 This library contains infrastructure code to write testable telegram bots for one to one conversations.
 The library use https://github.com/TelegramBots/Telegram.Bot package inside to communicate with Telegram.
@@ -127,19 +127,36 @@ services.AddOpenTelemetry()
 As soon as each request is usually associated with the specific user, it is convenient to
 have information about system user in the request instead of manual finding
 user by telegram id when it is required.
-This library helps to integrate ASP.NET.Identity with the telegram request context.
-To use it the model of user can be defined (example for the user with id of _Guid_ type)
+The library resolves the system user id for every incoming update and puts it into the request
+context. It doesn't need to know the shape of your user model - only how to find a user's id by
+their telegram id, and how to create one. Implement ```ITelegramUserQueryService<TKey>```
+(example for users with an id of _Guid_ type):
 ```csharp
-public class User : TelegramIdentityUser<Guid>
-{}
+public class TelegramUserQueryService(MyDbContext context) : ITelegramUserQueryService<Guid>
+{
+    public Task<TelegramUserId<Guid>?> FindUserIdAsync(long telegramId, CancellationToken ct = default)
+    {
+        return context.Users
+            .Where(u => u.TelegramId == telegramId)
+            .Select(u => new TelegramUserId<Guid>(u.Id))
+            .FirstOrDefaultAsync(ct);
+    }
 
+    public async Task<Guid> CreateAsync(TelegramData telegramData, CancellationToken ct = default)
+    {
+        // Store whatever you need from the telegram profile (username, names, language code).
+        var user = new User { TelegramId = telegramData.Id, UserName = telegramData.Username };
+        context.Users.Add(user);
+        await context.SaveChangesAsync(ct);
+
+        return user.Id;
+    }
+}
 ```
-Register Auth functionality in the container. Here is the using of ```User``` model with _Guid_ as identifier.
+Register Auth functionality in the container.
 ```csharp
 services.AddTelegramCore(new TelegramBotClientOptions(builder.Configuration["Telegram:Token"]!))
-    .AddTelegramAuthentication<User, Guid>()
-    .AddEntityFrameworkStores<CianCrawlerDbContext>()
-    .AddDefaultTokenProviders()
+    .AddTelegramAuthentication<Guid, TelegramUserQueryService>()
 ```
 
 After that in each telegram controller method can be retrieved ```TelegramRequestContext<Guid>``` which contains information
@@ -163,7 +180,7 @@ public sealed class RequestContext : TelegramRequestContext<Guid>
 ```
 
 ```csharp
-services.AddTelegramAuthentication<User, Guid, RequestContext>()
+services.AddTelegramAuthentication<Guid, TelegramUserQueryService, RequestContext>()
 ```
 
 Now the class ```RequestContext``` can be injected without defining request generic type in the each request.
@@ -178,11 +195,9 @@ public class UserController : TelegramController
     }
 ```
 
-**Note** - ```AddTelegramAuthentication()``` returns ```Microsoft.AspNetCore.Identity.IdentityBuilder```,
-use it to configure identity options.
-
 The logic of retrieving user id field is next: from the received telegram message telegram identifier of the user that send the message takes.
-Then this identifier maps to the identifier in the database. Then this identifier sets to the request context.
+Then ```ITelegramUserQueryService.FindUserIdAsync``` maps it to the system user identifier (```CreateAsync``` is called on the first
+update from a new telegram user), and this identifier is set to the request context.
 
 ### Middleware
 The package has the opportunity to extend request pipeline by adding custom middlewares. The example is the next
@@ -254,7 +269,7 @@ and _Laraue.Telegram.NET.Authentication_ packages and should be registered in su
 ```csharp
 services.AddTelegramCore(new TelegramBotClientOptions(builder.Configuration["Telegram:Token"]!))
     .AddTelegramRequestEfCoreInterceptors()
-    .AddTelegramAuthentication<User, Guid>()
+    .AddTelegramAuthentication<Guid, TelegramUserQueryService>()
 ```
 **Note** - there is already implemented IInterceptorState with storing state in the DB via EFCore in the package
 _Laraue.Telegram.NET.Interceptors.EFCore_.

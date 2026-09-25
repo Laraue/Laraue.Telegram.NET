@@ -1,15 +1,12 @@
-﻿using Laraue.Telegram.NET.Authentication.Models;
-
 namespace Laraue.Telegram.NET.Authentication.Services;
 
-public class UserService<TUser, TKey> : IUserService<TKey>
-    where TUser : class, ITelegramUser<TKey>, new()
+public class UserService<TKey> : IUserService<TKey>
     where TKey : IEquatable<TKey>
 {
-    private readonly ITelegramUserQueryService<TUser, TKey> _telegramUserQueryService;
+    private readonly ITelegramUserQueryService<TKey> _telegramUserQueryService;
 
     public UserService(
-        ITelegramUserQueryService<TUser, TKey> telegramUserQueryService)
+        ITelegramUserQueryService<TKey> telegramUserQueryService)
     {
         _telegramUserQueryService = telegramUserQueryService;
     }
@@ -19,28 +16,11 @@ public class UserService<TUser, TKey> : IUserService<TKey>
         TelegramData telegramData,
         CancellationToken cancellationToken = default)
     {
-        var user = await _telegramUserQueryService.FindAsync(telegramData.Id, cancellationToken);
-        if (user is not null)
-            return new LoginResponse<TKey>(user.Id);
+        var existingUser = await _telegramUserQueryService.FindUserIdAsync(telegramData.Id, cancellationToken);
+        if (existingUser is not null)
+            return new LoginResponse<TKey>(existingUser.Id);
         
-        var userId = await CreateUserInternalAsync(telegramData, cancellationToken);
+        var userId = await _telegramUserQueryService.CreateAsync(telegramData, cancellationToken);
         return new LoginResponse<TKey>(userId);
-    }
-
-    private Task<TKey> CreateUserInternalAsync(
-        TelegramData telegramData,
-        CancellationToken cancellationToken = default)
-    {
-        return _telegramUserQueryService.CreateAsync(
-            new TUser
-            {
-                TelegramId = telegramData.Id,
-                TelegramUserName = telegramData.Username,
-                CreatedAt = DateTime.UtcNow,
-                TelegramLanguageCode = telegramData.LanguageCode,
-                TelegramFirstName = telegramData.FirstName,
-                TelegramLastName = telegramData.LastName
-            },
-            cancellationToken);
     }
 }
