@@ -13,7 +13,7 @@
       <!-- Source Link -->
       <ItemGroup>
         <SourceRoot Include="$(MSBuildThisFileDirectory)/" />
-        <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0" PrivateAssets="All" />
+        <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.401" PrivateAssets="All" />
       </ItemGroup>
       <PropertyGroup>
         <PublishRepositoryUrl>true</PublishRepositoryUrl>
