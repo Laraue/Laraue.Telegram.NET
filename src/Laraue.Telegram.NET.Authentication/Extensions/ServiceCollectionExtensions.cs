@@ -1,6 +1,5 @@
-using Laraue.Telegram.NET.Abstractions;
+﻿using Laraue.Telegram.NET.Abstractions;
 using Laraue.Telegram.NET.Authentication.Middleware;
-using Laraue.Telegram.NET.Authentication.Models;
 using Laraue.Telegram.NET.Authentication.Protectors;
 using Laraue.Telegram.NET.Authentication.Services;
 using Laraue.Telegram.NET.Core.Extensions;
@@ -20,32 +19,28 @@ public static class ServiceCollectionExtensions
         /// Add authentication middleware with <see cref="TelegramRequestContext{TKey}"/>
         /// to the container and configure identity.
         /// </summary>
-        /// <typeparam name="TUser"></typeparam>
         /// <typeparam name="TKey"></typeparam>
         /// <typeparam name="TTelegramUserQueryService"></typeparam>
         /// <returns></returns>
-        public IServiceCollection AddTelegramAuthentication<TUser, TKey, TTelegramUserQueryService>()
-            where TUser : class, ITelegramUser<TKey>, new()
+        public IServiceCollection AddTelegramAuthentication<TKey, TTelegramUserQueryService>()
             where TKey : IEquatable<TKey>
-            where TTelegramUserQueryService : class, ITelegramUserQueryService<TUser, TKey> 
+            where TTelegramUserQueryService : class, ITelegramUserQueryService<TKey> 
         {
-            return serviceCollection.AddTelegramAuthentication<TUser, TKey, TTelegramUserQueryService, TelegramRequestContext<TKey>>();
+            return serviceCollection.AddTelegramAuthentication<TKey, TTelegramUserQueryService, TelegramRequestContext<TKey>>();
         }
 
         /// <summary>
         /// Add authentication middleware and the passed <see cref="TTelegramRequestContext"/>
         /// to the container and configure identity.
         /// </summary>
-        /// <typeparam name="TUser"></typeparam>
         /// <typeparam name="TKey"></typeparam>
         /// <typeparam name="TTelegramUserQueryService"></typeparam>
         /// <typeparam name="TTelegramRequestContext"></typeparam>
         /// <returns></returns>
-        public IServiceCollection AddTelegramAuthentication<TUser, TKey, TTelegramUserQueryService, TTelegramRequestContext>()
-            where TUser : class, ITelegramUser<TKey>, new()
+        public IServiceCollection AddTelegramAuthentication<TKey, TTelegramUserQueryService, TTelegramRequestContext>()
             where TKey : IEquatable<TKey>
             where TTelegramRequestContext : TelegramRequestContext<TKey>
-            where TTelegramUserQueryService : class, ITelegramUserQueryService<TUser, TKey>
+            where TTelegramUserQueryService : class, ITelegramUserQueryService<TKey>
         {
             serviceCollection.AddTelegramMiddleware<AuthTelegramMiddleware<TKey>>();
         
@@ -62,8 +57,8 @@ public static class ServiceCollectionExtensions
             serviceCollection.AddScoped<TelegramRequestContext>(
                 sp => sp.GetRequiredService<TTelegramRequestContext>());
         
-            serviceCollection.AddScoped<ITelegramUserQueryService<TUser, TKey>, TTelegramUserQueryService>();
-            serviceCollection.AddScoped<IUserService<TKey>, UserService<TUser, TKey>>();
+            serviceCollection.AddScoped<ITelegramUserQueryService<TKey>, TTelegramUserQueryService>();
+            serviceCollection.AddScoped<IUserService<TKey>, UserService<TKey>>();
 
             serviceCollection.UseUserRolesProvider<DefaultUserRoleProvider>();
             return serviceCollection.AddScoped<IControllerProtector, UserShouldBeInGroupProtector<TKey>>();
