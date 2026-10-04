@@ -3,7 +3,9 @@
     <LangVersion>Latest</LangVersion>
     <Copyright>Ilya Belyanskiy 2026</Copyright>
     <Authors>Belyanskiy Ilya</Authors>
-    <PackageProjectUrl>https://github.com/win7user10/Laraue.Telegram.NET</PackageProjectUrl>
+    <PackageProjectUrl>https://laraue.com/blog/projects/telegram-net</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/Laraue/Laraue.Telegram.NET</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
     <!-- Designate all projects as non-package projects by default -->
     <IsPackable>false</IsPackable>
     <TargetFramework>net10.0</TargetFramework>
