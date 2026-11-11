@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Laraue.Core.DateTime.Services.Abstractions;
 using Microsoft.Extensions.Options;
 
 namespace Laraue.Telegram.NET.Authentication.Services;
@@ -9,10 +10,10 @@ namespace Laraue.Telegram.NET.Authentication.Services;
 /// </summary>
 public sealed class InMemoryProfileSyncTracker(
     IOptions<TelegramAuthenticationOptions> options,
-    TimeProvider timeProvider)
+    IDateTimeProvider dateTimeProvider)
     : IProfileSyncTracker
 {
-    private readonly ConcurrentDictionary<long, DateTimeOffset> _syncedAt = new();
+    private readonly ConcurrentDictionary<long, DateTime> _syncedAt = new();
 
     /// <inheritdoc />
     public bool TryStartSync(long telegramId)
@@ -20,7 +21,7 @@ public sealed class InMemoryProfileSyncTracker(
         if (options.Value.ProfileSyncInterval is not { } interval)
             return false;
 
-        var now = timeProvider.GetUtcNow();
+        var now = dateTimeProvider.UtcNow;
         // Only one of concurrent callers adds or replaces the time and gets to sync.
         while (true)
         {
@@ -41,6 +42,6 @@ public sealed class InMemoryProfileSyncTracker(
     /// <inheritdoc />
     public void MarkSynced(long telegramId)
     {
-        _syncedAt[telegramId] = timeProvider.GetUtcNow();
+        _syncedAt[telegramId] = dateTimeProvider.UtcNow;
     }
 }

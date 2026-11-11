@@ -1,3 +1,4 @@
+using Laraue.Core.DateTime.Services.Abstractions;
 using Laraue.Telegram.NET.Authentication;
 using Laraue.Telegram.NET.Authentication.Middleware;
 using Laraue.Telegram.NET.Authentication.Services;
@@ -11,7 +12,7 @@ namespace Laraue.Telegram.NET.Tests.Authentication;
 
 public class ProfileSyncTests
 {
-    private readonly ManualTimeProvider _time = new();
+    private readonly ManualDateTimeProvider _time = new();
     private readonly Mock<ITelegramUserQueryService<int>> _queryService = new();
     private readonly TelegramAuthenticationOptions _options = new();
     private readonly TelegramRequestContext<int> _context = new();
@@ -129,10 +130,12 @@ public class ProfileSyncTests
         return nextCalled;
     }
 
-    private sealed class ManualTimeProvider : TimeProvider
+    private sealed class ManualDateTimeProvider : IDateTimeProvider
     {
-        public DateTimeOffset Now { get; set; } = new(2026, 11, 11, 12, 0, 0, TimeSpan.Zero);
+        public DateTime Now { get; set; } = new(2026, 11, 11, 12, 0, 0, DateTimeKind.Utc);
 
-        public override DateTimeOffset GetUtcNow() => Now;
+        public DateTime UtcNow => Now;
+
+        public DateTimeOffset UtcOffsetNow => new(Now);
     }
 }
