@@ -76,6 +76,10 @@ public class ControllerTests
                             })))
                         .AddScoped<IControllerProtector, UserShouldBeInGroupProtector<string>>()
                         .AddSingleton(_testChecker.Object);
+
+                    // Each test processes the queue itself (SendRequestAsync). The background processor would race
+                    // with it and could still be handling an update when the test checks the result.
+                    services.Remove(services.Single(d => d.ImplementationType == typeof(TelegramQueueBackgroundService)));
                 })
                 .Configure(b => b.MapTelegramRequests("/test")))
             .Build();

@@ -68,7 +68,7 @@ public class TelegramRouterTelemetryTests
             Message = new Message
             {
                 From = new User { FirstName = "Ilya", Username = "user", Id = 123, IsBot = false },
-                Text = "message",
+                Text = "telemetryMessage",
                 Date = DateTime.UtcNow,
                 Chat = new Chat { Id = 1, Type = ChatType.Private },
             },
@@ -128,7 +128,8 @@ public class TelegramRouterTelemetryTests
 
     public class TestTelegramController : Core.Routing.TelegramController
     {
-        [TelegramMessageRoute("message")]
+        // Unique in the test assembly: every test host loads all its controllers.
+        [TelegramMessageRoute("telemetryMessage")]
         public Task GetMessageAsync() => Task.CompletedTask;
     }
 }
