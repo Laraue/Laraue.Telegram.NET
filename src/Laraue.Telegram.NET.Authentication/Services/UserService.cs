@@ -21,6 +21,15 @@ public class UserService<TKey> : IUserService<TKey>
             return new LoginResponse<TKey>(existingUser.Id);
         
         var userId = await _telegramUserQueryService.CreateAsync(telegramData, cancellationToken);
-        return new LoginResponse<TKey>(userId);
+        return new LoginResponse<TKey>(userId) { IsCreated = true };
+    }
+
+    /// <inheritdoc />
+    public Task UpdateProfileAsync(
+        TKey userId,
+        TelegramData telegramData,
+        CancellationToken cancellationToken = default)
+    {
+        return _telegramUserQueryService.UpdateAsync(userId, telegramData, cancellationToken);
     }
 }

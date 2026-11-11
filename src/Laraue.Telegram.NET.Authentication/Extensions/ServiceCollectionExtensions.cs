@@ -4,6 +4,7 @@ using Laraue.Telegram.NET.Authentication.Protectors;
 using Laraue.Telegram.NET.Authentication.Services;
 using Laraue.Telegram.NET.Core.Extensions;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Laraue.Telegram.NET.Authentication.Extensions;
 
@@ -47,6 +48,9 @@ public static class ServiceCollectionExtensions
             serviceCollection.AddScoped<TTelegramRequestContext>();
             serviceCollection.AddSingleton<IUserSemaphore, UserSemaphore>();
             serviceCollection.AddSingleton<IUserIdByTelegramIdCache<TKey>, InMemoryUserIdByTelegramIdCache<TKey>>();
+            serviceCollection.AddOptions<TelegramAuthenticationOptions>();
+            serviceCollection.TryAddSingleton(TimeProvider.System);
+            serviceCollection.TryAddSingleton<IProfileSyncTracker, InMemoryProfileSyncTracker>();
 
             if (typeof(TTelegramRequestContext) != typeof(TelegramRequestContext<TKey>))
             {
