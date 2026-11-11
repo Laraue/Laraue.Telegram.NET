@@ -199,6 +199,30 @@ The logic of retrieving user id field is next: from the received telegram messag
 Then ```ITelegramUserQueryService.FindUserIdAsync``` maps it to the system user identifier (```CreateAsync``` is called on the first
 update from a new telegram user), and this identifier is set to the request context.
 
+### Keeping profiles up to date
+Users change their names and usernames, so what ```CreateAsync``` stored goes stale. Implement
+```ITelegramUserQueryService.UpdateAsync``` to store the current profile; the middleware calls it with the data of the
+incoming update at most once per interval for each user (not right after the user was created).
+```csharp
+public Task UpdateAsync(Guid userId, TelegramData telegramData, CancellationToken ct = default)
+{
+    return context.Users
+        .Where(u => u.Id == userId)
+        .ExecuteUpdateAsync(u => u
+            .SetProperty(x => x.UserName, telegramData.Username)
+            .SetProperty(x => x.FirstName, telegramData.FirstName), ct);
+}
+```
+The method does nothing by default, so implementing it is optional. The interval is 30 minutes by default and can be
+changed, or the updates turned off with ```null```:
+```csharp
+services.Configure<TelegramAuthenticationOptions>(options => options.ProfileSyncInterval = TimeSpan.FromHours(1));
+```
+The time of the last update of each user is kept in memory (```IProfileSyncTracker```), so after a restart each user's
+profile is updated once on their first update. A failed update is logged and doesn't fail the request. Times come
+from ```IDateTimeProvider``` of _Laraue.Core.DateTime_; the library registers ```DateTimeProvider``` when the app
+hasn't registered its own.
+
 ### Middleware
 The package has the opportunity to extend request pipeline by adding custom middlewares. The example is the next
 ```csharp
