@@ -13,6 +13,9 @@ jobs:
   build:
     # The type of runner that the job will run on
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write   # required so the job can request a GitHub OIDC token for NuGet trusted publishing
+      contents: read
     steps:
       - name: Checkout repository
         uses: actions/checkout@master
@@ -37,5 +40,11 @@ jobs:
       - name: Generate a NuGet package
         run: dotnet pack -p:TargetFrameworks=${{env.PROJECT_TARGET}} -p:PackageVersion=${{env.RELEASE_VERSION}} --no-build -c Release -o .
 
-      - name: Push to GitHub package registry
-        run: dotnet nuget push "*.nupkg" -k ${{secrets.NUGETORGTOKEN}} -s https://api.nuget.org/v3/index.json --skip-duplicate 
+      - name: NuGet login (OIDC → temp API key)
+        uses: NuGet/login@v1
+        id: login
+        with:
+          user: win7user10
+
+      - name: Push to NuGet.org
+        run: dotnet nuget push "*.nupkg" --api-key ${{ steps.login.outputs.NUGET_API_KEY }} -s https://api.nuget.org/v3/index.json --skip-duplicate
