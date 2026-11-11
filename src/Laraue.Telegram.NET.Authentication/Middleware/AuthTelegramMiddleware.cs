@@ -15,6 +15,7 @@ public class AuthTelegramMiddleware<TKey> : ITelegramMiddleware
     private readonly IUserRoleProvider _userRoleProvider;
     private readonly IUserSemaphore _userSemaphore;
     private readonly IUserIdByTelegramIdCache<TKey> _userIdByTelegramIdCache;
+    private readonly IProfileSyncTracker? _profileSyncTracker;
 
     public AuthTelegramMiddleware(
         IUserService<TKey> userService,
@@ -22,7 +23,8 @@ public class AuthTelegramMiddleware<TKey> : ITelegramMiddleware
         ILogger<AuthTelegramMiddleware<TKey>> logger,
         IUserRoleProvider userRoleProvider,
         IUserSemaphore userSemaphore,
-        IUserIdByTelegramIdCache<TKey> userIdByTelegramIdCache)
+        IUserIdByTelegramIdCache<TKey> userIdByTelegramIdCache,
+        IProfileSyncTracker? profileSyncTracker = null)
     {
         _userService = userService;
         _telegramRequestContext = telegramRequestContext;
@@ -30,6 +32,7 @@ public class AuthTelegramMiddleware<TKey> : ITelegramMiddleware
         _userRoleProvider = userRoleProvider;
         _userSemaphore = userSemaphore;
         _userIdByTelegramIdCache = userIdByTelegramIdCache;
+        _profileSyncTracker = profileSyncTracker;
     }
     
     /// <inheritdoc />
@@ -43,6 +46,7 @@ public class AuthTelegramMiddleware<TKey> : ITelegramMiddleware
         }
         
         _telegramRequestContext.UserId = await GetOrCreateSystemUserIdAsync(user, ct);
+        await SyncProfileAsync(_telegramRequestContext.UserId, user, ct);
 
         var userGroups = await _userRoleProvider.GetUserGroupsAsync(user);
         _telegramRequestContext.Groups = userGroups.Select(x => x.Name).ToArray();
@@ -65,16 +69,36 @@ public class AuthTelegramMiddleware<TKey> : ITelegramMiddleware
             return systemId!;
         }
         
-        var result = await _userService.LoginOrRegisterAsync(
-            new TelegramData(
-                user.Id,
-                user.Username,
-                user.LanguageCode,
-                user.FirstName,
-                user.LastName),
-            cancellationToken);
+        var result = await _userService.LoginOrRegisterAsync(ToTelegramData(user), cancellationToken);
+        if (result.IsCreated)
+            _profileSyncTracker?.MarkSynced(user.Id);
         
         await _userIdByTelegramIdCache.TryAddAsync(user.Id, result.UserId);
         return result.UserId;
+    }
+
+    /// <summary>
+    /// Stores the user's current Telegram profile once in <see cref="TelegramAuthenticationOptions.ProfileSyncInterval"/>.
+    /// A failure is logged and doesn't fail the update; the next try is after the interval. Without an
+    /// <see cref="IProfileSyncTracker"/>, e.g. when the middleware is registered by hand, profiles aren't updated.
+    /// </summary>
+    private async Task SyncProfileAsync(TKey userId, User user, CancellationToken cancellationToken)
+    {
+        if (_profileSyncTracker is null || !_profileSyncTracker.TryStartSync(user.Id))
+            return;
+
+        try
+        {
+            await _userService.UpdateProfileAsync(userId, ToTelegramData(user), cancellationToken);
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            _logger.LogWarning(e, "Failed to update the profile of telegram id {TelegramId}", user.Id);
+        }
+    }
+
+    private static TelegramData ToTelegramData(User user)
+    {
+        return new TelegramData(user.Id, user.Username, user.LanguageCode, user.FirstName, user.LastName);
     }
 }

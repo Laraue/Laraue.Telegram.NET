@@ -6,6 +6,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Laraue.Core.DateTime" Version="$(LaraueCoreDateTimeVersion)" />
     <PackageReference Include="Laraue.Core.Exceptions" Version="$(LaraueCoreExceptionsVersion)" />
   </ItemGroup>
 

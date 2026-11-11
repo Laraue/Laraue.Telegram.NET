@@ -11,12 +11,30 @@ public interface IUserService<TKey> where TKey : IEquatable<TKey>
     Task<LoginResponse<TKey>> LoginOrRegisterAsync(
         TelegramData loginData,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Updates the stored Telegram profile of an existing user. Does nothing by default, so implementations
+    /// written before it keep working.
+    /// </summary>
+    Task UpdateProfileAsync(
+        TKey userId,
+        TelegramData telegramData,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.CompletedTask;
+    }
 }
 
 /// <summary>
 /// Login response with the system user id.
 /// </summary>
-public record LoginResponse<TKey>(TKey UserId) where TKey : IEquatable<TKey>;
+public record LoginResponse<TKey>(TKey UserId) where TKey : IEquatable<TKey>
+{
+    /// <summary>
+    /// Whether the user was created by this login, so their profile is fresh.
+    /// </summary>
+    public bool IsCreated { get; init; }
+}
 
 /// <summary>
 /// Telegram credentials to get system user id.

@@ -23,6 +23,19 @@ public interface ITelegramUserQueryService<TUserKey>
     Task<TUserKey> CreateAsync(
         TelegramData telegramData,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Updates what the implementation stores from the Telegram profile of an existing user, since users change
+    /// their names and usernames. Called at most once per
+    /// <see cref="TelegramAuthenticationOptions.ProfileSyncInterval"/> for a user. Does nothing by default.
+    /// </summary>
+    Task UpdateAsync(
+        TUserKey userId,
+        TelegramData telegramData,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.CompletedTask;
+    }
 }
 
 /// <summary>
