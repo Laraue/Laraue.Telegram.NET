@@ -5,7 +5,7 @@ namespace Laraue.Telegram.NET.Tests.Polling;
 
 public class LongPollingScheduleTests
 {
-    private static readonly DateTimeOffset Start = new(2026, 11, 12, 10, 0, 0, TimeSpan.Zero);
+    private static readonly DateTime Start = new(2026, 11, 12, 10, 0, 0, DateTimeKind.Utc);
     private static readonly TimeSpan Active = TimeSpan.FromMilliseconds(200);
     private static readonly TimeSpan Idle = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan IdleAfter = TimeSpan.FromMinutes(10);

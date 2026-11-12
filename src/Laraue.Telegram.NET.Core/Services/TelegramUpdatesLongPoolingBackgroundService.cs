@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+﻿using Laraue.Core.DateTime.Services.Abstractions;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -13,7 +14,7 @@ public class TelegramUpdatesLongPoolingBackgroundService : BackgroundService
     private readonly IServiceProvider _serviceProvider;
     private readonly IOptions<TelegramNetOptions> _options;
     private readonly ILogger<TelegramUpdatesLongPoolingBackgroundService> _logger;
-    private readonly TimeProvider _timeProvider;
+    private readonly IDateTimeProvider _dateTimeProvider;
 
     /// <summary>
     /// How long Telegram should be unreachable before the outage is logged as an error, not a warning.
@@ -29,12 +30,13 @@ public class TelegramUpdatesLongPoolingBackgroundService : BackgroundService
     public TelegramUpdatesLongPoolingBackgroundService(
         IServiceProvider serviceProvider,
         IOptions<TelegramNetOptions> options,
-        ILogger<TelegramUpdatesLongPoolingBackgroundService> logger)
+        ILogger<TelegramUpdatesLongPoolingBackgroundService> logger,
+        IDateTimeProvider dateTimeProvider)
     {
         _serviceProvider = serviceProvider;
         _options = options;
         _logger = logger;
-        _timeProvider = serviceProvider.GetService<TimeProvider>() ?? TimeProvider.System;
+        _dateTimeProvider = dateTimeProvider;
     }
 
     /// <inheritdoc />
@@ -62,7 +64,7 @@ public class TelegramUpdatesLongPoolingBackgroundService : BackgroundService
             options.LongPoolingIdleInterval is { } idleInterval ? TimeSpan.FromMilliseconds(idleInterval) : null,
             TimeSpan.FromMilliseconds(options.LongPoolingIdleAfter),
             TimeSpan.FromMilliseconds(options.LongPoolingMaxRetryInterval),
-            _timeProvider.GetUtcNow());
+            _dateTimeProvider.UtcNow);
 
         var currentOffset = await LoadLastOffsetAsync(stoppingToken);
         var isIdle = false;
@@ -79,7 +81,7 @@ public class TelegramUpdatesLongPoolingBackgroundService : BackgroundService
                     .LoadNewUpdatesToQueueAsync(currentOffset, batchSize, options.LongPoolingTimeout, stoppingToken)
                     .ConfigureAwait(false);
 
-                var now = _timeProvider.GetUtcNow();
+                var now = _dateTimeProvider.UtcNow;
                 if (schedule.FailingSince is { } failingSince)
                 {
                     _logger.LogInformation(
@@ -98,12 +100,12 @@ public class TelegramUpdatesLongPoolingBackgroundService : BackgroundService
             }
             catch (Exception e)
             {
-                var now = _timeProvider.GetUtcNow();
+                var now = _dateTimeProvider.UtcNow;
                 schedule.OnFailure(now, TelegramRequestErrors.GetRetryAfter(e));
                 isOutageErrorLogged |= LogFailure(e, schedule, now, isOutageErrorLogged);
             }
 
-            var delayFrom = _timeProvider.GetUtcNow();
+            var delayFrom = _dateTimeProvider.UtcNow;
             var delay = schedule.GetDelay(delayFrom);
 
             if (schedule.ConsecutiveFailures == 0 && schedule.IsIdle(delayFrom) != isIdle)
@@ -118,7 +120,7 @@ public class TelegramUpdatesLongPoolingBackgroundService : BackgroundService
             }
 
             await Task
-                .Delay(delay, _timeProvider, stoppingToken)
+                .Delay(delay, stoppingToken)
                 .ConfigureAwait(false);
         }
     }
@@ -130,7 +132,7 @@ public class TelegramUpdatesLongPoolingBackgroundService : BackgroundService
     private bool LogFailure(
         Exception exception,
         LongPollingSchedule schedule,
-        DateTimeOffset now,
+        DateTime now,
         bool isOutageErrorLogged)
     {
         var delay = schedule.GetDelay(now);

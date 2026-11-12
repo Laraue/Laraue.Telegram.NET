@@ -1,4 +1,6 @@
 ﻿using System.Reflection;
+using Laraue.Core.DateTime.Services.Abstractions;
+using Laraue.Core.DateTime.Services.Impl;
 using Laraue.Telegram.NET.Abstractions;
 using Laraue.Telegram.NET.Core.Middleware;
 using Laraue.Telegram.NET.Core.Routing;
@@ -6,6 +8,7 @@ using Laraue.Telegram.NET.Core.Routing.Attributes;
 using Laraue.Telegram.NET.Core.Routing.Middleware;
 using Laraue.Telegram.NET.Core.Services;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using Telegram.Bot;
 
@@ -48,6 +51,8 @@ public static class ServiceCollectionExtensions
                 .AddScoped<ITelegramUpdatesService, TelegramUpdatesService>()
                 .AddHostedService<TelegramUpdatesLongPoolingBackgroundService>()
                 .AddHostedService<TelegramQueueBackgroundService>();
+
+            serviceCollection.TryAddSingleton<IDateTimeProvider, DateTimeProvider>();
         
             serviceCollection
                 .AddSingleton<ITelegramBotClient, TelegramBotClient>(s => 

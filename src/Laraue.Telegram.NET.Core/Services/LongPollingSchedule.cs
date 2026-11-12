@@ -13,7 +13,7 @@ public sealed class LongPollingSchedule
     private readonly TimeSpan _idleAfter;
     private readonly TimeSpan _maxRetryInterval;
 
-    private DateTimeOffset _lastUpdatesAt;
+    private DateTime _lastUpdatesAt;
     private TimeSpan? _retryAfter;
 
     /// <inheritdoc cref="LongPollingSchedule"/>
@@ -27,7 +27,7 @@ public sealed class LongPollingSchedule
         TimeSpan? idleInterval,
         TimeSpan idleAfter,
         TimeSpan maxRetryInterval,
-        DateTimeOffset startedAt)
+        DateTime startedAt)
     {
         _activeInterval = activeInterval;
         _idleInterval = idleInterval;
@@ -44,12 +44,12 @@ public sealed class LongPollingSchedule
     /// <summary>
     /// When the current series of failures started, null when the last request succeeded.
     /// </summary>
-    public DateTimeOffset? FailingSince { get; private set; }
+    public DateTime? FailingSince { get; private set; }
 
     /// <summary>
     /// Whether the bot got no updates for long enough to poll with the idle interval.
     /// </summary>
-    public bool IsIdle(DateTimeOffset now)
+    public bool IsIdle(DateTime now)
     {
         return _idleInterval is not null && now - _lastUpdatesAt >= _idleAfter;
     }
@@ -57,7 +57,7 @@ public sealed class LongPollingSchedule
     /// <summary>
     /// Registers a successful request.
     /// </summary>
-    public void OnSuccess(bool hasUpdates, DateTimeOffset now)
+    public void OnSuccess(bool hasUpdates, DateTime now)
     {
         if (hasUpdates)
         {
@@ -74,7 +74,7 @@ public sealed class LongPollingSchedule
     /// </summary>
     /// <param name="now"></param>
     /// <param name="retryAfter">How long Telegram asked to wait before the next request, if it did.</param>
-    public void OnFailure(DateTimeOffset now, TimeSpan? retryAfter = null)
+    public void OnFailure(DateTime now, TimeSpan? retryAfter = null)
     {
         ConsecutiveFailures++;
         FailingSince ??= now;
@@ -84,7 +84,7 @@ public sealed class LongPollingSchedule
     /// <summary>
     /// How long to wait before the next request.
     /// </summary>
-    public TimeSpan GetDelay(DateTimeOffset now)
+    public TimeSpan GetDelay(DateTime now)
     {
         if (ConsecutiveFailures > 0)
         {
