@@ -70,6 +70,46 @@ The library takes the decision what way to use based on the property `WebhookUrl
 When the setting is set, the application considers Webhook mode is used, otherwise long pooling mode
 is active.
 
+#### Long pooling settings
+
+In long pooling mode the bot asks Telegram for new updates with `getUpdates`. Telegram holds each request
+open for up to `LongPoolingTimeout` seconds and answers as soon as an update arrives, so a message reaches
+the bot right away while a bot nobody writes to makes one request per timeout.
+
+```json
+{
+  "Telegram": {
+    "Token": "5118263652:AAHiPDQ8kVcbs2WZWG4Z...",
+    "LongPoolingBatchSize": 30,
+    "LongPoolingInterval": 200,
+    "LongPoolingIdleInterval": 30000,
+    "TelegramUpdatesInMemoryQueueMaxCount": 30,
+    "TelegramUpdatesPoolInterval": 200
+  }
+}
+```
+
+| Setting                       | Required | Default | Description                                                                                                                           |
+|-------------------------------|----------|---------|---------------------------------------------------------------------------------------------------------------------------------------|
+| `LongPoolingBatchSize`        | yes      |         | Max updates to request at once.                                                                                                       |
+| `LongPoolingInterval`         | yes      |         | Milliseconds between requests while the bot gets updates.                                                                             |
+| `LongPoolingTimeout`          | no       | 30      | Seconds Telegram holds a request open waiting for updates. 0 turns long pooling into short polling.                                   |
+| `LongPoolingIdleInterval`     | no       | not set | Milliseconds between requests once the bot got no updates for `LongPoolingIdleAfter`. Not set keeps `LongPoolingInterval` all the time. |
+| `LongPoolingIdleAfter`        | no       | 600000  | Milliseconds without updates after which `LongPoolingIdleInterval` is used. The next update switches back to `LongPoolingInterval`.  |
+| `LongPoolingMaxRetryInterval` | no       | 60000   | The longest wait in milliseconds between retries while Telegram is unreachable.                                                       |
+
+The idle interval reduces requests further when nobody uses the bot, at the cost of latency: the first message
+after a quiet period can wait up to `LongPoolingIdleInterval` before the bot sees it. After a start the bot
+counts as active, so it uses `LongPoolingInterval` for at least `LongPoolingIdleAfter`.
+
+When Telegram is unreachable or answers with a server error, the bot retries after 1, 2, 4... seconds up to
+`LongPoolingMaxRetryInterval`, or after the time Telegram asked to wait. Such an outage is logged as a warning
+on the first failure and every 10th one after it, as an error once it lasts 5 minutes, and as information
+when Telegram is reachable again. Other errors, like an invalid token, are logged as errors every time.
+
+`TelegramUpdatesInMemoryQueueMaxCount` and `TelegramUpdatesPoolInterval` are required in both modes: they set
+how many stored updates are processed at once and how often, in milliseconds, the queue is checked.
+
 The token in the TelegramBotClientOptions can be taken via @BotFather bot in the Telegram.
 _MapTelegramRequests_ method setup the address which will listen callbacks from the telegram.
 This address should be set also on the telegram side by calling the next url:
