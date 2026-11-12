@@ -107,7 +107,6 @@ the bot right away while a bot nobody writes to makes one request per timeout.
     "Token": "5118263652:AAHiPDQ8kVcbs2WZWG4Z...",
     "LongPoolingBatchSize": 30,
     "LongPoolingInterval": 200,
-    "LongPoolingIdleInterval": 30000,
     "TelegramUpdatesInMemoryQueueMaxCount": 30,
     "TelegramUpdatesPoolInterval": 200
   }
@@ -117,15 +116,9 @@ the bot right away while a bot nobody writes to makes one request per timeout.
 | Setting                       | Required | Default | Description                                                                                                                           |
 |-------------------------------|----------|---------|---------------------------------------------------------------------------------------------------------------------------------------|
 | `LongPoolingBatchSize`        | yes      |         | Max updates to request at once.                                                                                                       |
-| `LongPoolingInterval`         | yes      |         | Milliseconds between requests while the bot gets updates.                                                                             |
+| `LongPoolingInterval`         | yes      |         | Milliseconds between requests.                                                                                                        |
 | `LongPoolingTimeout`          | no       | 30      | Seconds Telegram holds a request open waiting for updates. 0 turns long pooling into short polling.                                   |
-| `LongPoolingIdleInterval`     | no       | not set | Milliseconds between requests once the bot got no updates for `LongPoolingIdleAfter`. Not set keeps `LongPoolingInterval` all the time. |
-| `LongPoolingIdleAfter`        | no       | 600000  | Milliseconds without updates after which `LongPoolingIdleInterval` is used. The next update switches back to `LongPoolingInterval`.  |
 | `LongPoolingMaxRetryInterval` | no       | 60000   | The longest wait in milliseconds between retries while Telegram is unreachable.                                                       |
-
-The idle interval reduces requests further when nobody uses the bot, at the cost of latency: the first message
-after a quiet period can wait up to `LongPoolingIdleInterval` before the bot sees it. After a start the bot
-counts as active, so it uses `LongPoolingInterval` for at least `LongPoolingIdleAfter`.
 
 When Telegram is unreachable or answers with a server error, the bot retries after 1, 2, 4... seconds up to
 `LongPoolingMaxRetryInterval`, or after the time Telegram asked to wait. Such an outage is logged as a warning
