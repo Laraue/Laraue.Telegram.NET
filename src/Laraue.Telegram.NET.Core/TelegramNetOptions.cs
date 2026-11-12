@@ -27,28 +27,31 @@ public class TelegramNetOptions
     public int? LongPoolingInterval { get; init; }
 
     /// <summary>
-    /// How many seconds Telegram holds a getUpdates request open waiting for new updates.
-    /// While nobody writes to the bot it makes one request per this period instead of one per
-    /// <see cref="LongPoolingInterval"/>; a new update still arrives immediately. 0 means short polling.
+    /// How many seconds Telegram holds a getUpdates request open waiting for new updates, when long pooling
+    /// mode is used. While nobody writes to the bot it makes one request per this period instead of one per
+    /// <see cref="LongPoolingInterval"/>; a new update still arrives immediately. 0 means short polling,
+    /// 30 seconds when not set.
     /// </summary>
-    public int LongPoolingTimeout { get; init; } = 30;
+    public int? LongPoolingTimeout { get; init; }
 
     /// <summary>
     /// The interval between long pooling cycles in milliseconds once the bot got no updates for
-    /// <see cref="LongPoolingIdleAfter"/>. The first update switches back to <see cref="LongPoolingInterval"/>.
-    /// Null keeps <see cref="LongPoolingInterval"/> all the time.
+    /// <see cref="LongPoolingIdleAfter"/>, when long pooling mode is used. The first update switches back to
+    /// <see cref="LongPoolingInterval"/>. When not set <see cref="LongPoolingInterval"/> is used all the time.
     /// </summary>
     public int? LongPoolingIdleInterval { get; init; }
 
     /// <summary>
-    /// Milliseconds without updates after which <see cref="LongPoolingIdleInterval"/> is used. 10 minutes by default.
+    /// Milliseconds without updates after which <see cref="LongPoolingIdleInterval"/> is used, when long pooling
+    /// mode is used. 10 minutes when not set.
     /// </summary>
-    public int LongPoolingIdleAfter { get; init; } = 600_000;
+    public int? LongPoolingIdleAfter { get; init; }
 
     /// <summary>
-    /// The longest wait in milliseconds between retries while Telegram is unreachable. 1 minute by default.
+    /// The longest wait in milliseconds between retries while Telegram is unreachable, when long pooling
+    /// mode is used. 1 minute when not set.
     /// </summary>
-    public int LongPoolingMaxRetryInterval { get; init; } = 60_000;
+    public int? LongPoolingMaxRetryInterval { get; init; }
     
     /// <summary>
     /// Max telegram updates to load in memory queue from the storage.

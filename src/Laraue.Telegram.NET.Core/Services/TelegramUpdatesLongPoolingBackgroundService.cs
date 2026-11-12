@@ -26,6 +26,10 @@ public class TelegramUpdatesLongPoolingBackgroundService : BackgroundService
     /// </summary>
     private const int WarningEveryFailures = 10;
 
+    private const int DefaultTimeoutSeconds = 30;
+    private static readonly TimeSpan DefaultIdleAfter = TimeSpan.FromMinutes(10);
+    private static readonly TimeSpan DefaultMaxRetryInterval = TimeSpan.FromMinutes(1);
+
     /// <inheritdoc cref="TelegramUpdatesLongPoolingBackgroundService"/>.
     public TelegramUpdatesLongPoolingBackgroundService(
         IServiceProvider serviceProvider,
@@ -59,11 +63,13 @@ public class TelegramUpdatesLongPoolingBackgroundService : BackgroundService
             ?? throw new InvalidOperationException($"{nameof(TelegramNetOptions.LongPoolingInterval)} setup is required");
         
         var options = _options.Value;
+        var timeout = options.LongPoolingTimeout ?? DefaultTimeoutSeconds;
+        var idleAfter = ToTimeSpan(options.LongPoolingIdleAfter) ?? DefaultIdleAfter;
         var schedule = new LongPollingSchedule(
             TimeSpan.FromMilliseconds(longPoolingInterval),
-            options.LongPoolingIdleInterval is { } idleInterval ? TimeSpan.FromMilliseconds(idleInterval) : null,
-            TimeSpan.FromMilliseconds(options.LongPoolingIdleAfter),
-            TimeSpan.FromMilliseconds(options.LongPoolingMaxRetryInterval),
+            ToTimeSpan(options.LongPoolingIdleInterval),
+            idleAfter,
+            ToTimeSpan(options.LongPoolingMaxRetryInterval) ?? DefaultMaxRetryInterval,
             _dateTimeProvider.UtcNow);
 
         var currentOffset = await LoadLastOffsetAsync(stoppingToken);
@@ -78,7 +84,7 @@ public class TelegramUpdatesLongPoolingBackgroundService : BackgroundService
                 var telegramUpdatesService = scope.ServiceProvider.GetRequiredService<ITelegramUpdatesService>();
 
                 var newOffset = await telegramUpdatesService
-                    .LoadNewUpdatesToQueueAsync(currentOffset, batchSize, options.LongPoolingTimeout, stoppingToken)
+                    .LoadNewUpdatesToQueueAsync(currentOffset, batchSize, timeout, stoppingToken)
                     .ConfigureAwait(false);
 
                 var now = _dateTimeProvider.UtcNow;
@@ -115,7 +121,7 @@ public class TelegramUpdatesLongPoolingBackgroundService : BackgroundService
                     isIdle
                         ? "No telegram updates for {IdleAfter}, polling every {Delay}"
                         : "Got telegram updates after {IdleAfter} or more of silence, polling every {Delay}",
-                    TimeSpan.FromMilliseconds(options.LongPoolingIdleAfter),
+                    idleAfter,
                     delay);
             }
 
@@ -170,6 +176,11 @@ public class TelegramUpdatesLongPoolingBackgroundService : BackgroundService
         }
 
         return false;
+    }
+
+    private static TimeSpan? ToTimeSpan(int? milliseconds)
+    {
+        return milliseconds is { } value ? TimeSpan.FromMilliseconds(value) : null;
     }
 
     private async Task<int> LoadLastOffsetAsync(CancellationToken cancellationToken)
