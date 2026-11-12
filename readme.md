@@ -33,16 +33,17 @@ any request type can be handled by implementing the attribute inherited from _Te
 
 To start using this and other controllers, the library should be added with the following way:
 
+The settings, including the bot token, are read from `TelegramNetOptions`. The token can be taken
+via @BotFather bot in the Telegram.
+
 A. Using webhooks
 ```csharp
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddOptions<TelegramNetOptions>();
 builder.Services.Configure<TelegramNetOptions>(builder.Configuration.GetSection("Telegram"));
 
-builder
-    .Services
-    .AddTelegramCore(new TelegramBotClientOptions("5118263652:AAHiPDQ8kVcbs2WZWG4Z..."))
+builder.Services
+    .AddTelegramCore()
     .AddInMemoryUpdatesQueue();
 
 var app = builder.Build();
@@ -50,37 +51,89 @@ app.MapTelegramRequests("/api/telegram");
 app.Run();
 ```
 
+```json
+{
+  "Telegram": {
+    "Token": "5118263652:AAHiPDQ8kVcbs2WZWG4Z...",
+    "WebhookUrl": "/api/telegram",
+    "TelegramUpdatesInMemoryQueueMaxCount": 30,
+    "TelegramUpdatesPoolInterval": 200
+  }
+}
+```
+
+_MapTelegramRequests_ sets the path that receives updates from Telegram. The address should also be set
+on the Telegram side by calling the next url:
+```
+https://api.telegram.org/bot5118263652:AAHiPDQ8kVcbs2WZWG4Z.../setWebhook?url=https://your.host/api/telegram
+```
+
 B. Using long pooling
 ```csharp
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddOptions<TelegramNetOptions>();
 builder.Services.Configure<TelegramNetOptions>(builder.Configuration.GetSection("Telegram"));
 
-builder
-    .Services
-    .AddTelegramCore(new TelegramBotClientOptions("5118263652:AAHiPDQ8kVcbs2WZWG4Z..."))
+builder.Services
+    .AddTelegramCore()
     .AddInMemoryUpdatesQueue();
 
 var app = builder.Build();
 app.Run();
 ```
 
+`AddTelegramCore()` registers the controllers of the calling assembly. Other assemblies can be passed
+explicitly: `AddTelegramCore([typeof(MenuController).Assembly])`. The options can also be passed
+directly instead of the configuration: `AddTelegramCore(new TelegramNetOptions { Token = "..." })`.
+
 The library takes the decision what way to use based on the property `WebhookUrl` in the app settings.
 When the setting is set, the application considers Webhook mode is used, otherwise long pooling mode
 is active.
-
-The token in the TelegramBotClientOptions can be taken via @BotFather bot in the Telegram.
-_MapTelegramRequests_ method setup the address which will listen callbacks from the telegram.
-This address should be set also on the telegram side by calling the next url:
 
 **Note**: The AddInMemoryUpdatesQueue call adds to the container InMemory queue to store telegram updates.
 It is not recommended due to possible updates loss. The better way is to use 
 `AddEfCoreUpdatesQueue<MyDbContext>` from the package `Laraue.Telegram.NET.UpdatesQueue.EFCore`
 to store all updates queue in the database or implementing custom `IUpdatesQueue`.
+
+#### Long pooling settings
+
+In long pooling mode the bot asks Telegram for new updates with `getUpdates`. Telegram holds each request
+open for up to `LongPoolingTimeout` seconds and answers as soon as an update arrives, so a message reaches
+the bot right away while a bot nobody writes to makes one request per timeout.
+
+```json
+{
+  "Telegram": {
+    "Token": "5118263652:AAHiPDQ8kVcbs2WZWG4Z...",
+    "LongPoolingBatchSize": 30,
+    "LongPoolingInterval": 200,
+    "LongPoolingIdleInterval": 30000,
+    "TelegramUpdatesInMemoryQueueMaxCount": 30,
+    "TelegramUpdatesPoolInterval": 200
+  }
+}
 ```
-https://api.telegram.org/bot5118263652:AAHiPDQ8kVcbs2WZWG4Z.../setWebhook?url=https://your.host/api/telegram
-```
+
+| Setting                       | Required | Default | Description                                                                                                                           |
+|-------------------------------|----------|---------|---------------------------------------------------------------------------------------------------------------------------------------|
+| `LongPoolingBatchSize`        | yes      |         | Max updates to request at once.                                                                                                       |
+| `LongPoolingInterval`         | yes      |         | Milliseconds between requests while the bot gets updates.                                                                             |
+| `LongPoolingTimeout`          | no       | 30      | Seconds Telegram holds a request open waiting for updates. 0 turns long pooling into short polling.                                   |
+| `LongPoolingIdleInterval`     | no       | not set | Milliseconds between requests once the bot got no updates for `LongPoolingIdleAfter`. Not set keeps `LongPoolingInterval` all the time. |
+| `LongPoolingIdleAfter`        | no       | 600000  | Milliseconds without updates after which `LongPoolingIdleInterval` is used. The next update switches back to `LongPoolingInterval`.  |
+| `LongPoolingMaxRetryInterval` | no       | 60000   | The longest wait in milliseconds between retries while Telegram is unreachable.                                                       |
+
+The idle interval reduces requests further when nobody uses the bot, at the cost of latency: the first message
+after a quiet period can wait up to `LongPoolingIdleInterval` before the bot sees it. After a start the bot
+counts as active, so it uses `LongPoolingInterval` for at least `LongPoolingIdleAfter`.
+
+When Telegram is unreachable or answers with a server error, the bot retries after 1, 2, 4... seconds up to
+`LongPoolingMaxRetryInterval`, or after the time Telegram asked to wait. Such an outage is logged as a warning
+on the first failure and every 10th one after it, as an error once it lasts 5 minutes, and as information
+when Telegram is reachable again. Other errors, like an invalid token, are logged as errors every time.
+
+`TelegramUpdatesInMemoryQueueMaxCount` and `TelegramUpdatesPoolInterval` are required in both modes: they set
+how many stored updates are processed at once and how often, in milliseconds, the queue is checked.
 
 ### Metrics and tracing
 
@@ -155,8 +208,8 @@ public class TelegramUserQueryService(MyDbContext context) : ITelegramUserQueryS
 ```
 Register Auth functionality in the container.
 ```csharp
-services.AddTelegramCore(new TelegramBotClientOptions(builder.Configuration["Telegram:Token"]!))
-    .AddTelegramAuthentication<Guid, TelegramUserQueryService>()
+services.AddTelegramCore()
+    .AddTelegramAuthentication<Guid, TelegramUserQueryService>();
 ```
 
 After that in each telegram controller method can be retrieved ```TelegramRequestContext<Guid>``` which contains information
@@ -291,14 +344,14 @@ public class InterceptorState : BaseInterceptorState
 Add the functionality to container. Interceptors are depending on _Laraue.Telegram.NET.Core_ 
 and _Laraue.Telegram.NET.Authentication_ packages and should be registered in such order.
 ```csharp
-services.AddTelegramCore(new TelegramBotClientOptions(builder.Configuration["Telegram:Token"]!))
-    .AddTelegramRequestEfCoreInterceptors()
+services.AddTelegramCore()
     .AddTelegramAuthentication<Guid, TelegramUserQueryService>()
+    .AddTelegramRequestInterceptors<InterceptorState, Guid>([typeof(InterceptorState).Assembly]);
 ```
 **Note** - there is already implemented IInterceptorState with storing state in the DB via EFCore in the package
 _Laraue.Telegram.NET.Interceptors.EFCore_.
 ```csharp
-services.AddTelegramRequestEfCoreInterceptors<Guid, MyDbContext>(assemblies})
+services.AddTelegramRequestEfCoreInterceptors<Guid, MyDbContext>([typeof(UpdateAgeInterceptor).Assembly]);
 ```
 
 After interceptors state storage is setup, the interceptor can be implemented

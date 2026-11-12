@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <Description>Library to build telegram bots using controller classes.</Description>
@@ -13,6 +13,7 @@
 
 
   <ItemGroup>
+    <PackageReference Include="Laraue.Core.DateTime" Version="$(LaraueCoreDateTimeVersion)" />
     <PackageReference Include="Laraue.Core.Threading" Version="$(LaraueCoreThreadingVersion)" />
   </ItemGroup>
 

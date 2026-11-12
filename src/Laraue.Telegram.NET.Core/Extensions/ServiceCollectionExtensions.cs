@@ -1,4 +1,7 @@
 ﻿using System.Reflection;
+using System.Runtime.CompilerServices;
+using Laraue.Core.DateTime.Services.Abstractions;
+using Laraue.Core.DateTime.Services.Impl;
 using Laraue.Telegram.NET.Abstractions;
 using Laraue.Telegram.NET.Core.Middleware;
 using Laraue.Telegram.NET.Core.Routing;
@@ -6,6 +9,7 @@ using Laraue.Telegram.NET.Core.Routing.Attributes;
 using Laraue.Telegram.NET.Core.Routing.Middleware;
 using Laraue.Telegram.NET.Core.Services;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using Telegram.Bot;
 
@@ -25,13 +29,15 @@ public static class ServiceCollectionExtensions
         /// <param name="telegramNetOptions"></param>
         /// <param name="controllerAssemblies"></param>
         /// <returns></returns>
+        [MethodImpl(MethodImplOptions.NoInlining)]
         public IServiceCollection AddTelegramCore(
             TelegramNetOptions telegramNetOptions,
             Assembly[]? controllerAssemblies = null)
         {
+            // Resolved here: the overload below would see this library as its caller.
             return serviceCollection
                 .AddSingleton(Options.Create(telegramNetOptions))
-                .AddTelegramCore(controllerAssemblies);
+                .AddTelegramCore(controllerAssemblies ?? [Assembly.GetCallingAssembly()]);
         }
 
         /// <summary>
@@ -39,6 +45,7 @@ public static class ServiceCollectionExtensions
         /// </summary>
         /// <param name="controllerAssemblies"></param>
         /// <returns></returns>
+        [MethodImpl(MethodImplOptions.NoInlining)]
         public IServiceCollection AddTelegramCore(
             Assembly[]? controllerAssemblies = null)
         {
@@ -48,6 +55,8 @@ public static class ServiceCollectionExtensions
                 .AddScoped<ITelegramUpdatesService, TelegramUpdatesService>()
                 .AddHostedService<TelegramUpdatesLongPoolingBackgroundService>()
                 .AddHostedService<TelegramQueueBackgroundService>();
+
+            serviceCollection.TryAddSingleton<IDateTimeProvider, DateTimeProvider>();
         
             serviceCollection
                 .AddSingleton<ITelegramBotClient, TelegramBotClient>(s => 
