@@ -1,4 +1,5 @@
 ﻿using System.Reflection;
+using System.Runtime.CompilerServices;
 using Laraue.Core.DateTime.Services.Abstractions;
 using Laraue.Core.DateTime.Services.Impl;
 using Laraue.Telegram.NET.Abstractions;
@@ -28,13 +29,15 @@ public static class ServiceCollectionExtensions
         /// <param name="telegramNetOptions"></param>
         /// <param name="controllerAssemblies"></param>
         /// <returns></returns>
+        [MethodImpl(MethodImplOptions.NoInlining)]
         public IServiceCollection AddTelegramCore(
             TelegramNetOptions telegramNetOptions,
             Assembly[]? controllerAssemblies = null)
         {
+            // Resolved here: the overload below would see this library as its caller.
             return serviceCollection
                 .AddSingleton(Options.Create(telegramNetOptions))
-                .AddTelegramCore(controllerAssemblies);
+                .AddTelegramCore(controllerAssemblies ?? [Assembly.GetCallingAssembly()]);
         }
 
         /// <summary>
@@ -42,6 +45,7 @@ public static class ServiceCollectionExtensions
         /// </summary>
         /// <param name="controllerAssemblies"></param>
         /// <returns></returns>
+        [MethodImpl(MethodImplOptions.NoInlining)]
         public IServiceCollection AddTelegramCore(
             Assembly[]? controllerAssemblies = null)
         {

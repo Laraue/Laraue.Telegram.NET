@@ -84,8 +84,7 @@ app.Run();
 
 `AddTelegramCore()` registers the controllers of the calling assembly. Other assemblies can be passed
 explicitly: `AddTelegramCore([typeof(MenuController).Assembly])`. The options can also be passed
-directly instead of the configuration, together with the controller assemblies:
-`AddTelegramCore(new TelegramNetOptions { Token = "..." }, [typeof(MenuController).Assembly])`.
+directly instead of the configuration: `AddTelegramCore(new TelegramNetOptions { Token = "..." })`.
 
 The library takes the decision what way to use based on the property `WebhookUrl` in the app settings.
 When the setting is set, the application considers Webhook mode is used, otherwise long pooling mode
