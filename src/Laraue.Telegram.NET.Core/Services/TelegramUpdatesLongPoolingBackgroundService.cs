@@ -2,7 +2,6 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Telegram.Bot.Exceptions;
 
 namespace Laraue.Telegram.NET.Core.Services;
 
@@ -14,6 +13,17 @@ public class TelegramUpdatesLongPoolingBackgroundService : BackgroundService
     private readonly IServiceProvider _serviceProvider;
     private readonly IOptions<TelegramNetOptions> _options;
     private readonly ILogger<TelegramUpdatesLongPoolingBackgroundService> _logger;
+    private readonly TimeProvider _timeProvider;
+
+    /// <summary>
+    /// How long Telegram should be unreachable before the outage is logged as an error, not a warning.
+    /// </summary>
+    private static readonly TimeSpan OutageErrorAfter = TimeSpan.FromMinutes(5);
+
+    /// <summary>
+    /// While Telegram is unreachable a warning is logged for the first failure and then for every n-th one.
+    /// </summary>
+    private const int WarningEveryFailures = 10;
 
     /// <inheritdoc cref="TelegramUpdatesLongPoolingBackgroundService"/>.
     public TelegramUpdatesLongPoolingBackgroundService(
@@ -24,6 +34,7 @@ public class TelegramUpdatesLongPoolingBackgroundService : BackgroundService
         _serviceProvider = serviceProvider;
         _options = options;
         _logger = logger;
+        _timeProvider = serviceProvider.GetService<TimeProvider>() ?? TimeProvider.System;
     }
 
     /// <inheritdoc />
@@ -45,30 +56,118 @@ public class TelegramUpdatesLongPoolingBackgroundService : BackgroundService
         var longPoolingInterval = _options.Value.LongPoolingInterval
             ?? throw new InvalidOperationException($"{nameof(TelegramNetOptions.LongPoolingInterval)} setup is required");
         
+        var options = _options.Value;
+        var schedule = new LongPollingSchedule(
+            TimeSpan.FromMilliseconds(longPoolingInterval),
+            options.LongPoolingIdleInterval is { } idleInterval ? TimeSpan.FromMilliseconds(idleInterval) : null,
+            TimeSpan.FromMilliseconds(options.LongPoolingIdleAfter),
+            TimeSpan.FromMilliseconds(options.LongPoolingMaxRetryInterval),
+            _timeProvider.GetUtcNow());
+
         var currentOffset = await LoadLastOffsetAsync(stoppingToken);
+        var isIdle = false;
+        var isOutageErrorLogged = false;
         
         while (!stoppingToken.IsCancellationRequested)
         {
-            using var scope = _serviceProvider.CreateScope();
-            var telegramUpdatesService = scope.ServiceProvider.GetRequiredService<ITelegramUpdatesService>();
-
             try
             {
-                currentOffset = await telegramUpdatesService
-                    .LoadNewUpdatesToQueueAsync(currentOffset, batchSize, stoppingToken)
+                using var scope = _serviceProvider.CreateScope();
+                var telegramUpdatesService = scope.ServiceProvider.GetRequiredService<ITelegramUpdatesService>();
+
+                var newOffset = await telegramUpdatesService
+                    .LoadNewUpdatesToQueueAsync(currentOffset, batchSize, options.LongPoolingTimeout, stoppingToken)
                     .ConfigureAwait(false);
+
+                var now = _timeProvider.GetUtcNow();
+                if (schedule.FailingSince is { } failingSince)
+                {
+                    _logger.LogInformation(
+                        "Telegram is reachable again after {Failures} failed requests in {Outage}",
+                        schedule.ConsecutiveFailures,
+                        now - failingSince);
+                }
+
+                schedule.OnSuccess(newOffset != currentOffset, now);
+                isOutageErrorLogged = false;
+                currentOffset = newOffset;
             }
-            catch (RequestException e)
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
-                _logger.LogError(e, "Error while requesting messages from telegram.");
+                return;
             }
-            finally
+            catch (Exception e)
             {
-                await Task
-                    .Delay(longPoolingInterval, stoppingToken)
-                    .ConfigureAwait(false);
+                var now = _timeProvider.GetUtcNow();
+                schedule.OnFailure(now, TelegramRequestErrors.GetRetryAfter(e));
+                isOutageErrorLogged |= LogFailure(e, schedule, now, isOutageErrorLogged);
             }
+
+            var delayFrom = _timeProvider.GetUtcNow();
+            var delay = schedule.GetDelay(delayFrom);
+
+            if (schedule.ConsecutiveFailures == 0 && schedule.IsIdle(delayFrom) != isIdle)
+            {
+                isIdle = !isIdle;
+                _logger.LogInformation(
+                    isIdle
+                        ? "No telegram updates for {IdleAfter}, polling every {Delay}"
+                        : "Got telegram updates after {IdleAfter} or more of silence, polling every {Delay}",
+                    TimeSpan.FromMilliseconds(options.LongPoolingIdleAfter),
+                    delay);
+            }
+
+            await Task
+                .Delay(delay, _timeProvider, stoppingToken)
+                .ConfigureAwait(false);
         }
+    }
+
+    /// <summary>
+    /// Logs a failed request so that an outage gives a few lines instead of one per retry.
+    /// Returns whether the error about a long outage was logged.
+    /// </summary>
+    private bool LogFailure(
+        Exception exception,
+        LongPollingSchedule schedule,
+        DateTimeOffset now,
+        bool isOutageErrorLogged)
+    {
+        var delay = schedule.GetDelay(now);
+
+        if (!TelegramRequestErrors.IsTransient(exception))
+        {
+            _logger.LogError(exception, "Error while requesting updates from telegram, retrying in {Delay}", delay);
+
+            return false;
+        }
+
+        var failures = schedule.ConsecutiveFailures;
+        var outage = now - schedule.FailingSince!.Value;
+
+        if (!isOutageErrorLogged && outage >= OutageErrorAfter)
+        {
+            _logger.LogError(
+                exception,
+                "Telegram has been unreachable for {Outage}, {Failures} failed requests, retrying in {Delay}",
+                outage,
+                failures,
+                delay);
+
+            return true;
+        }
+
+        if (failures == 1 || failures % WarningEveryFailures == 0)
+        {
+            _logger.LogWarning(
+                "Telegram is unreachable, {Failures} failed requests in {Outage}, retrying in {Delay}: {Reason}",
+                failures,
+                outage,
+                delay,
+                exception.Message);
+        }
+
+        return false;
     }
 
     private async Task<int> LoadLastOffsetAsync(CancellationToken cancellationToken)

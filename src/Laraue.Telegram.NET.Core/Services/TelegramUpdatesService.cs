@@ -14,9 +14,14 @@ public interface ITelegramUpdatesService
     /// Load all new updates to the application <see cref="IUpdatesQueue"/>.
     /// Returns latest update offset.
     /// </summary>
+    /// <param name="offset">The first update id to load.</param>
+    /// <param name="limit">Max updates to load per request.</param>
+    /// <param name="timeout">Seconds Telegram waits for new updates when there are none, 0 for short polling.</param>
+    /// <param name="cancellationToken"></param>
     Task<int> LoadNewUpdatesToQueueAsync(
         int offset,
         int limit,
+        int timeout = 0,
         CancellationToken cancellationToken = default);
     
     /// <summary>
@@ -43,12 +48,13 @@ public class TelegramUpdatesService(
     public async Task<int> LoadNewUpdatesToQueueAsync(
         int offset,
         int limit,
+        int timeout,
         CancellationToken cancellationToken)
     {
         while (!cancellationToken.IsCancellationRequested)
         {
             var updates = await telegramBotClient
-                .GetUpdates(offset, limit, cancellationToken: cancellationToken)
+                .GetUpdates(offset, limit, timeout, cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
 
             if (updates.Length > 0)
@@ -105,42 +111,59 @@ public class TelegramUpdatesService(
             .WaitAsync(chatId.Value, cancellationToken)
             .ConfigureAwait(false);
         
-        await using var scope = serviceProvider.CreateAsyncScope();
-        var telegramRouter = scope.ServiceProvider.GetRequiredService<ITelegramRouter>();
+        Exception? error = null;
 
-        try
+        await using (var routeScope = serviceProvider.CreateAsyncScope())
         {
-            await telegramRouter
-                .RouteAsync(update, cancellationToken)
-                .ConfigureAwait(false);
+            var telegramRouter = routeScope.ServiceProvider.GetRequiredService<ITelegramRouter>();
 
-            await updatesQueue
+            try
+            {
+                await telegramRouter
+                    .RouteAsync(update, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (Exception e)
+            {
+                error = e;
+
+                foreach (var handler in exceptionHandlers)
+                {
+                    if (await handler.TryHandleAsync(e, cancellationToken))
+                    {
+                        error = null;
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Updates of a batch are processed in parallel, so each one marks itself in the queue through
+        // its own scope. The queue may hold a DbContext, which must not be shared between parallel
+        // operations, and the router's scope is not reused here, so changes a failed handler left
+        // in its DbContext are not saved together with the failed update.
+        await using var queueScope = serviceProvider.CreateAsyncScope();
+        var queue = queueScope.ServiceProvider.GetRequiredService<IUpdatesQueue>();
+
+        if (error is null)
+        {
+            await queue
                 .SetProcessedAsync(update, cancellationToken)
                 .ConfigureAwait(false);
-            
+
             logger.LogDebug("Processed update {Id}", update.Id);
+
+            return;
         }
-        catch (Exception e)
-        {
-            foreach (var handler in exceptionHandlers)
-                if (await handler.TryHandleAsync(e, cancellationToken))
-                {
-                    await updatesQueue
-                        .SetProcessedAsync(update, cancellationToken)
-                        .ConfigureAwait(false);
-                    
-                    return;
-                }
-            
-            await updatesQueue
-                .SetFailedAsync(
-                    update,
-                    e.Message,
-                    e.StackTrace,
-                    cancellationToken)
-                .ConfigureAwait(false);
-            
-            logger.LogError(e, "Error while handling update {Id}, {Message}", update.Id, e.Message);
-        }
+
+        await queue
+            .SetFailedAsync(
+                update,
+                error.Message,
+                error.StackTrace,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        logger.LogError(error, "Error while handling update {Id}, {Message}", update.Id, error.Message);
     }
 }
