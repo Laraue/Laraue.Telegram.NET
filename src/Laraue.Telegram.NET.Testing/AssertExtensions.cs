@@ -17,6 +17,18 @@ public static class AssertExtensions
         }
 
         /// <summary>
+        /// Asserts that the message was edited into a rich message with exactly the passed HTML.
+        /// </summary>
+        public void CheckRichMessage(string expectedHtml)
+        {
+            if (request.RichMessage is null)
+                throw new TelegramNetAssertException(
+                    $"Expected a rich message edit, but the message was edited to text '{request.Text}'");
+
+            AssertEqual(expectedHtml, request.RichMessage.Html);
+        }
+
+        /// <summary>
         /// Asserts that client telegram message has exactly the passed rows count.
         /// </summary>
         public void HasButtonsRowsCount(int exceptedRowsCount)
