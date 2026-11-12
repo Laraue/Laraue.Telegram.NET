@@ -1,39 +1,25 @@
 namespace Laraue.Telegram.NET.Core.Services;
 
 /// <summary>
-/// Decides how long to wait before the next getUpdates request: a short interval while the bot gets updates,
-/// a longer one after it got none for a while, and a growing one while Telegram fails.
+/// Decides how long to wait before the next getUpdates request: a short interval while Telegram answers,
+/// and a growing one while Telegram fails.
 /// </summary>
 public sealed class LongPollingSchedule
 {
     private static readonly TimeSpan MinRetryInterval = TimeSpan.FromSeconds(1);
 
-    private readonly TimeSpan _activeInterval;
-    private readonly TimeSpan? _idleInterval;
-    private readonly TimeSpan _idleAfter;
+    private readonly TimeSpan _interval;
     private readonly TimeSpan _maxRetryInterval;
 
-    private DateTime _lastUpdatesAt;
     private TimeSpan? _retryAfter;
 
     /// <inheritdoc cref="LongPollingSchedule"/>
-    /// <param name="activeInterval">The interval while the bot gets updates.</param>
-    /// <param name="idleInterval">The interval after <paramref name="idleAfter"/> without updates, null to never change it.</param>
-    /// <param name="idleAfter">How long without updates makes the bot idle.</param>
+    /// <param name="interval">The interval between successful requests.</param>
     /// <param name="maxRetryInterval">The longest interval between retries after failures.</param>
-    /// <param name="startedAt">The moment polling started, counted as the last activity.</param>
-    public LongPollingSchedule(
-        TimeSpan activeInterval,
-        TimeSpan? idleInterval,
-        TimeSpan idleAfter,
-        TimeSpan maxRetryInterval,
-        DateTime startedAt)
+    public LongPollingSchedule(TimeSpan interval, TimeSpan maxRetryInterval)
     {
-        _activeInterval = activeInterval;
-        _idleInterval = idleInterval;
-        _idleAfter = idleAfter;
+        _interval = interval;
         _maxRetryInterval = maxRetryInterval;
-        _lastUpdatesAt = startedAt;
     }
 
     /// <summary>
@@ -47,23 +33,10 @@ public sealed class LongPollingSchedule
     public DateTime? FailingSince { get; private set; }
 
     /// <summary>
-    /// Whether the bot got no updates for long enough to poll with the idle interval.
-    /// </summary>
-    public bool IsIdle(DateTime now)
-    {
-        return _idleInterval is not null && now - _lastUpdatesAt >= _idleAfter;
-    }
-
-    /// <summary>
     /// Registers a successful request.
     /// </summary>
-    public void OnSuccess(bool hasUpdates, DateTime now)
+    public void OnSuccess()
     {
-        if (hasUpdates)
-        {
-            _lastUpdatesAt = now;
-        }
-
         ConsecutiveFailures = 0;
         FailingSince = null;
         _retryAfter = null;
@@ -72,7 +45,7 @@ public sealed class LongPollingSchedule
     /// <summary>
     /// Registers a failed request.
     /// </summary>
-    /// <param name="now"></param>
+    /// <param name="now">The moment the request failed.</param>
     /// <param name="retryAfter">How long Telegram asked to wait before the next request, if it did.</param>
     public void OnFailure(DateTime now, TimeSpan? retryAfter = null)
     {
@@ -84,19 +57,19 @@ public sealed class LongPollingSchedule
     /// <summary>
     /// How long to wait before the next request.
     /// </summary>
-    public TimeSpan GetDelay(DateTime now)
+    public TimeSpan GetDelay()
     {
-        if (ConsecutiveFailures > 0)
+        if (ConsecutiveFailures == 0)
         {
-            var baseInterval = _activeInterval > MinRetryInterval ? _activeInterval : MinRetryInterval;
-            var exponent = Math.Min(ConsecutiveFailures - 1, 30);
-            var backoff = TimeSpan.FromMilliseconds(Math.Min(
-                baseInterval.TotalMilliseconds * Math.Pow(2, exponent),
-                _maxRetryInterval.TotalMilliseconds));
-
-            return _retryAfter > backoff ? _retryAfter.Value : backoff;
+            return _interval;
         }
 
-        return IsIdle(now) ? _idleInterval!.Value : _activeInterval;
+        var baseInterval = _interval > MinRetryInterval ? _interval : MinRetryInterval;
+        var exponent = Math.Min(ConsecutiveFailures - 1, 30);
+        var backoff = TimeSpan.FromMilliseconds(Math.Min(
+            baseInterval.TotalMilliseconds * Math.Pow(2, exponent),
+            _maxRetryInterval.TotalMilliseconds));
+
+        return _retryAfter > backoff ? _retryAfter.Value : backoff;
     }
 }

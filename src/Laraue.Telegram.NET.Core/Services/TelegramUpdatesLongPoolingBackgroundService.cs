@@ -27,7 +27,6 @@ public class TelegramUpdatesLongPoolingBackgroundService : BackgroundService
     private const int WarningEveryFailures = 10;
 
     private const int DefaultTimeoutSeconds = 30;
-    private static readonly TimeSpan DefaultIdleAfter = TimeSpan.FromMinutes(10);
     private static readonly TimeSpan DefaultMaxRetryInterval = TimeSpan.FromMinutes(1);
 
     /// <inheritdoc cref="TelegramUpdatesLongPoolingBackgroundService"/>.
@@ -64,16 +63,11 @@ public class TelegramUpdatesLongPoolingBackgroundService : BackgroundService
         
         var options = _options.Value;
         var timeout = options.LongPoolingTimeout ?? DefaultTimeoutSeconds;
-        var idleAfter = ToTimeSpan(options.LongPoolingIdleAfter) ?? DefaultIdleAfter;
         var schedule = new LongPollingSchedule(
             TimeSpan.FromMilliseconds(longPoolingInterval),
-            ToTimeSpan(options.LongPoolingIdleInterval),
-            idleAfter,
-            ToTimeSpan(options.LongPoolingMaxRetryInterval) ?? DefaultMaxRetryInterval,
-            _dateTimeProvider.UtcNow);
+            ToTimeSpan(options.LongPoolingMaxRetryInterval) ?? DefaultMaxRetryInterval);
 
         var currentOffset = await LoadLastOffsetAsync(stoppingToken);
-        var isIdle = false;
         var isOutageErrorLogged = false;
         
         while (!stoppingToken.IsCancellationRequested)
@@ -96,7 +90,7 @@ public class TelegramUpdatesLongPoolingBackgroundService : BackgroundService
                         now - failingSince);
                 }
 
-                schedule.OnSuccess(newOffset != currentOffset, now);
+                schedule.OnSuccess();
                 isOutageErrorLogged = false;
                 currentOffset = newOffset;
             }
@@ -111,22 +105,8 @@ public class TelegramUpdatesLongPoolingBackgroundService : BackgroundService
                 isOutageErrorLogged |= LogFailure(e, schedule, now, isOutageErrorLogged);
             }
 
-            var delayFrom = _dateTimeProvider.UtcNow;
-            var delay = schedule.GetDelay(delayFrom);
-
-            if (schedule.ConsecutiveFailures == 0 && schedule.IsIdle(delayFrom) != isIdle)
-            {
-                isIdle = !isIdle;
-                _logger.LogInformation(
-                    isIdle
-                        ? "No telegram updates for {IdleAfter}, polling every {Delay}"
-                        : "Got telegram updates after {IdleAfter} or more of silence, polling every {Delay}",
-                    idleAfter,
-                    delay);
-            }
-
             await Task
-                .Delay(delay, stoppingToken)
+                .Delay(schedule.GetDelay(), stoppingToken)
                 .ConfigureAwait(false);
         }
     }
@@ -141,7 +121,7 @@ public class TelegramUpdatesLongPoolingBackgroundService : BackgroundService
         DateTime now,
         bool isOutageErrorLogged)
     {
-        var delay = schedule.GetDelay(now);
+        var delay = schedule.GetDelay();
 
         if (!TelegramRequestErrors.IsTransient(exception))
         {

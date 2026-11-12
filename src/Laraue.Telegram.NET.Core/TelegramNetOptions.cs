@@ -22,7 +22,7 @@ public class TelegramNetOptions
     public int? LongPoolingBatchSize { get; init; }
     
     /// <summary>
-    /// The interval between long pooling cycles in milliseconds, used while the bot gets updates.
+    /// The interval between long pooling cycles in milliseconds.
     /// </summary>
     public int? LongPoolingInterval { get; init; }
 
@@ -33,19 +33,6 @@ public class TelegramNetOptions
     /// 30 seconds when not set.
     /// </summary>
     public int? LongPoolingTimeout { get; init; }
-
-    /// <summary>
-    /// The interval between long pooling cycles in milliseconds once the bot got no updates for
-    /// <see cref="LongPoolingIdleAfter"/>, when long pooling mode is used. The first update switches back to
-    /// <see cref="LongPoolingInterval"/>. When not set <see cref="LongPoolingInterval"/> is used all the time.
-    /// </summary>
-    public int? LongPoolingIdleInterval { get; init; }
-
-    /// <summary>
-    /// Milliseconds without updates after which <see cref="LongPoolingIdleInterval"/> is used, when long pooling
-    /// mode is used. 10 minutes when not set.
-    /// </summary>
-    public int? LongPoolingIdleAfter { get; init; }
 
     /// <summary>
     /// The longest wait in milliseconds between retries while Telegram is unreachable, when long pooling
