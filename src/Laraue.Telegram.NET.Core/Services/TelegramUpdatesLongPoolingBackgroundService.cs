@@ -84,7 +84,8 @@ public class TelegramUpdatesLongPoolingBackgroundService : BackgroundService
                 var now = _dateTimeProvider.UtcNow;
                 if (schedule.FailingSince is { } failingSince)
                 {
-                    _logger.LogInformation(
+                    // Warning, like the failures: hosts that log only warnings still see when the outage ended.
+                    _logger.LogWarning(
                         "Telegram is reachable again after {Failures} failed requests in {Outage}",
                         schedule.ConsecutiveFailures,
                         now - failingSince);
