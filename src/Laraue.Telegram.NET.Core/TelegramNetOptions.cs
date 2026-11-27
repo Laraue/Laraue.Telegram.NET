@@ -35,6 +35,12 @@ public class TelegramNetOptions
     public int? LongPoolingTimeout { get; init; }
 
     /// <summary>
+    /// How many milliseconds a getUpdates request may take beyond <see cref="LongPoolingTimeout"/> before it
+    /// is abandoned as hung and retried, when long pooling mode is used.
+    /// </summary>
+    public int LongPoolingTimeoutGrace { get; init; } = 15_000;
+
+    /// <summary>
     /// The longest wait in milliseconds between retries while Telegram is unreachable, when long pooling
     /// mode is used. 1 minute when not set.
     /// </summary>

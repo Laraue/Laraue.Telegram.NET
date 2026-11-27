@@ -1,9 +1,11 @@
 using System.Collections.Concurrent;
 using Laraue.Telegram.NET.Abstractions;
+using Laraue.Telegram.NET.Core;
 using Laraue.Telegram.NET.Core.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Moq;
 using Telegram.Bot;
 using Telegram.Bot.Types;
@@ -35,6 +37,7 @@ public class ProcessQueueUpdatesTests
             .AddScoped<IUpdatesQueue, SingleUserQueue>()
             .AddScoped<ITelegramRouter, SlowRouter>()
             .AddSingleton(Mock.Of<ITelegramBotClient>())
+            .AddSingleton(Options.Create(new TelegramNetOptions { Token = "test" }))
             .AddSingleton(typeof(ILogger<>), typeof(NullLogger<>))
             .AddScoped<ITelegramUpdatesService, TelegramUpdatesService>()
             .BuildServiceProvider();

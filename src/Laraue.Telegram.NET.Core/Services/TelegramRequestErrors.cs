@@ -18,7 +18,7 @@ public static class TelegramRequestErrors
         {
             ApiRequestException apiException => IsTransient(apiException.ErrorCode),
             RequestException { HttpStatusCode: { } statusCode } => IsTransient((int)statusCode),
-            RequestException { InnerException: HttpRequestException or TaskCanceledException or IOException } => true,
+            RequestException { InnerException: HttpRequestException or OperationCanceledException or IOException } => true,
             HttpRequestException => true,
             _ => false,
         };
