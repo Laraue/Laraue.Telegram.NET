@@ -4,6 +4,7 @@ using Laraue.Telegram.NET.Core.Extensions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Telegram.Bot;
+using Telegram.Bot.Exceptions;
 using Telegram.Bot.Types;
 
 namespace Laraue.Telegram.NET.Core.Services;
@@ -44,7 +45,13 @@ public class TelegramUpdatesService(
     : ITelegramUpdatesService
 {
     private readonly KeyedSemaphoreSlim<long> _requestByChatIdSemaphore = new (1);
-    
+
+    /// <summary>
+    /// How long a getUpdates request may take beyond the long polling timeout before it is abandoned.
+    /// Without it a hung connection is noticed only after HttpClient's default 100 seconds (BRD-384).
+    /// </summary>
+    internal TimeSpan GetUpdatesGrace { get; init; } = TimeSpan.FromSeconds(15);
+
     public async Task<int> LoadNewUpdatesToQueueAsync(
         int offset,
         int limit,
@@ -53,8 +60,7 @@ public class TelegramUpdatesService(
     {
         while (!cancellationToken.IsCancellationRequested)
         {
-            var updates = await telegramBotClient
-                .GetUpdates(offset, limit, timeout, cancellationToken: cancellationToken)
+            var updates = await GetUpdatesAsync(offset, limit, timeout, cancellationToken)
                 .ConfigureAwait(false);
 
             if (updates.Length > 0)
@@ -71,6 +77,33 @@ public class TelegramUpdatesService(
         }
 
         return offset;
+    }
+
+    /// <summary>
+    /// Requests updates with a deadline of the long polling timeout plus <see cref="GetUpdatesGrace"/>:
+    /// Telegram answers within the timeout, so a request that takes longer hangs. Only getUpdates gets the
+    /// deadline, other requests such as file uploads keep the client's own timeout.
+    /// </summary>
+    private async Task<Update[]> GetUpdatesAsync(
+        int offset,
+        int limit,
+        int timeout,
+        CancellationToken cancellationToken)
+    {
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        deadline.CancelAfter(TimeSpan.FromSeconds(timeout) + GetUpdatesGrace);
+
+        try
+        {
+            return await telegramBotClient
+                .GetUpdates(offset, limit, timeout, cancellationToken: deadline.Token)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException e) when (!cancellationToken.IsCancellationRequested)
+        {
+            // The same exception Telegram.Bot throws when HttpClient times out, so it counts as an outage.
+            throw new RequestException("Request timed out", e);
+        }
     }
 
     public async Task ProcessQueueUpdatesAsync(
