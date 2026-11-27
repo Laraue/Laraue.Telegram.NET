@@ -3,6 +3,7 @@ using Laraue.Telegram.NET.Abstractions;
 using Laraue.Telegram.NET.Core.Extensions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Telegram.Bot;
 using Telegram.Bot.Exceptions;
 using Telegram.Bot.Types;
@@ -41,7 +42,8 @@ public class TelegramUpdatesService(
     IUpdatesQueue updatesQueue,
     IServiceProvider serviceProvider,
     ILogger<TelegramUpdatesService> logger,
-    IEnumerable<IExceptionHandler> exceptionHandlers)
+    IEnumerable<IExceptionHandler> exceptionHandlers,
+    IOptions<TelegramNetOptions> options)
     : ITelegramUpdatesService
 {
     private readonly KeyedSemaphoreSlim<long> _requestByChatIdSemaphore = new (1);
@@ -50,7 +52,8 @@ public class TelegramUpdatesService(
     /// How long a getUpdates request may take beyond the long polling timeout before it is abandoned.
     /// Without it a hung connection is noticed only after HttpClient's default 100 seconds (BRD-384).
     /// </summary>
-    internal TimeSpan GetUpdatesGrace { get; init; } = TimeSpan.FromSeconds(15);
+    private readonly TimeSpan _getUpdatesGrace = TimeSpan.FromMilliseconds(
+        options.Value.LongPoolingTimeoutGrace ?? 15_000);
 
     public async Task<int> LoadNewUpdatesToQueueAsync(
         int offset,
@@ -80,7 +83,7 @@ public class TelegramUpdatesService(
     }
 
     /// <summary>
-    /// Requests updates with a deadline of the long polling timeout plus <see cref="GetUpdatesGrace"/>:
+    /// Requests updates with a deadline of the long polling timeout plus <see cref="_getUpdatesGrace"/>:
     /// Telegram answers within the timeout, so a request that takes longer hangs. Only getUpdates gets the
     /// deadline, other requests such as file uploads keep the client's own timeout.
     /// </summary>
@@ -91,7 +94,7 @@ public class TelegramUpdatesService(
         CancellationToken cancellationToken)
     {
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        deadline.CancelAfter(TimeSpan.FromSeconds(timeout) + GetUpdatesGrace);
+        deadline.CancelAfter(TimeSpan.FromSeconds(timeout) + _getUpdatesGrace);
 
         try
         {

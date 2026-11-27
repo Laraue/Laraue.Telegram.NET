@@ -1,7 +1,9 @@
 using Laraue.Telegram.NET.Abstractions;
+using Laraue.Telegram.NET.Core;
 using Laraue.Telegram.NET.Core.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Moq;
 using Telegram.Bot;
 using Telegram.Bot.Exceptions;
@@ -32,24 +34,26 @@ public class GetUpdatesDeadlineTests
     [Fact]
     public async Task Stopping_ShouldCancelInsteadOfTimingOut()
     {
-        var service = CreateService(HangingClient(), TimeSpan.FromMinutes(1));
+        var service = CreateService(HangingClient(), graceMilliseconds: 60_000);
         using var stopping = new CancellationTokenSource(TimeSpan.FromMilliseconds(50));
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
             () => service.LoadNewUpdatesToQueueAsync(0, 10, 0, stopping.Token));
     }
 
-    private static TelegramUpdatesService CreateService(ITelegramBotClient client, TimeSpan? grace = null)
+    private static TelegramUpdatesService CreateService(ITelegramBotClient client, int graceMilliseconds = 50)
     {
         return new TelegramUpdatesService(
             client,
             Mock.Of<IUpdatesQueue>(),
             new ServiceCollection().BuildServiceProvider(),
             NullLogger<TelegramUpdatesService>.Instance,
-            [])
-        {
-            GetUpdatesGrace = grace ?? TimeSpan.FromMilliseconds(50),
-        };
+            [],
+            Options.Create(new TelegramNetOptions
+            {
+                Token = "test",
+                LongPoolingTimeoutGrace = graceMilliseconds,
+            }));
     }
 
     /// <summary>
