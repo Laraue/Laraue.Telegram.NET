@@ -52,8 +52,7 @@ public class TelegramUpdatesService(
     /// How long a getUpdates request may take beyond the long polling timeout before it is abandoned.
     /// Without it a hung connection is noticed only after HttpClient's default 100 seconds (BRD-384).
     /// </summary>
-    private readonly TimeSpan _getUpdatesGrace = TimeSpan.FromMilliseconds(
-        options.Value.LongPoolingTimeoutGrace ?? 15_000);
+    private readonly TimeSpan _getUpdatesGrace = TimeSpan.FromMilliseconds(options.Value.LongPoolingTimeoutGrace);
 
     public async Task<int> LoadNewUpdatesToQueueAsync(
         int offset,
