@@ -12,6 +12,8 @@ public class TelegramRequestErrorsTests
     {
         { new RequestException("Bot API Service Failure", new HttpRequestException("Resource temporarily unavailable")), true },
         { new RequestException("Telegram Bot API error 502: Bad Gateway", HttpStatusCode.BadGateway), true },
+        { new RequestException("Request timed out", new TaskCanceledException()), true },
+        { new RequestException("Request timed out", new OperationCanceledException()), true },
         { new ApiRequestException("Too Many Requests", 429), true },
         { new ApiRequestException("Internal Server Error", 500), true },
         { new ApiRequestException("Unauthorized", 401), false },
